@@ -2652,7 +2652,7 @@ function downloadReceiptById(id){
   generateReceipt(o);
 }
 function generateReceipt(o){
-  var issuer="BuyerProxy Admin";
+  var issuer="Manager";
   var d=new Date(o.updated_at||o.created_at);
   var dateStr=d.toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric"});
   var timeStr=d.toLocaleTimeString("en-KE",{hour:"2-digit",minute:"2-digit"});
