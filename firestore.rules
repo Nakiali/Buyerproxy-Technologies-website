@@ -1,0 +1,131 @@
+// ═══════════════════════════════════════════════════════════════
+//  BuyerProxy — Firestore Security Rules
+//  Deploy via: Firebase Console → Firestore → Rules tab
+//  Or via CLI: firebase deploy --only firestore:rules
+//
+//  Data path: /bp_data/collections/{collection}/{docId}
+//  User profiles: /bp_data/collections/users/{uid}
+//
+//  ROLES: "admin" | "agent" | "client"
+//  Role is stored in the user's own Firestore profile document.
+// ═══════════════════════════════════════════════════════════════
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ──────────────────────────────────────
+
+    // Returns true if the request carries a valid Firebase Auth token
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Fetches the role from the user's Firestore profile (server-side only)
+    function userRole() {
+      return get(/databases/$(database)/documents/bp_data/collections/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userRole() == "admin";
+    }
+
+    function isAgent() {
+      return isSignedIn() && userRole() == "agent";
+    }
+
+    function isClient() {
+      return isSignedIn() && userRole() == "client";
+    }
+
+    // True when the requesting user owns this profile document
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // ── /bp_data/collections — root container doc ─────────────
+    match /bp_data/collections {
+      allow read, write: if false; // never accessed directly
+    }
+
+    // ── Users ─────────────────────────────────────────────────
+    // Path: /bp_data/collections/users/{uid}
+    match /bp_data/collections/users/{uid} {
+
+      // Anyone signed in can read their own profile.
+      // Admins can read all profiles (needed for agent assignment dropdowns).
+      // Agents can read other agents' public profiles (for team awareness).
+      allow read: if isSelf(uid) || isAdmin() || isAgent();
+
+      // Users can only create their own profile (uid must match auth uid).
+      // Role is hardcoded to "client" on registration — admin must manually
+      // elevate to "agent" via the admin portal.
+      allow create: if isSelf(uid)
+        && request.resource.data.role == "client"
+        && request.resource.data.uid == request.auth.uid;
+
+      // Users can update their own profile but cannot self-elevate their role.
+      allow update: if isSelf(uid)
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.uid == resource.data.uid;
+
+      // Only admins can update any user's role or delete a user profile.
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── Orders ────────────────────────────────────────────────
+    // Path: /bp_data/collections/orders/{orderId}
+    match /bp_data/collections/orders/{orderId} {
+
+      // Admins can read all orders.
+      // Agents can read orders assigned to them (agent_uid matches their uid).
+      // Clients can read their own orders (customer_id matches their uid).
+      // Unauthenticated users (guest order tracking) get NO Firestore read —
+      // tracking page reads from the local cache only.
+      allow read: if isAdmin()
+        || (isAgent() && resource.data.agent_uid == request.auth.uid)
+        || (isClient() && resource.data.customer_id == request.auth.uid);
+
+      // Anyone (including unauthenticated) can create an order — this supports
+      // the guest (public) order form. Rate-limit abuse via App Check (recommended).
+      // The created doc must NOT contain a role field or auth-sensitive data.
+      allow create: if request.resource.data.keys().hasNone(["role","admin"])
+        && request.resource.data.status == "New";
+
+      // Only admins can update any order field (status, agent assignment, M-Pesa ref).
+      // Agents can only update status and agent_note on orders assigned to them.
+      allow update: if isAdmin()
+        || (isAgent()
+          && resource.data.agent_uid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(["status","agent_note","updated_at","rating","rated_at"]));
+
+      // Only admins can delete orders.
+      allow delete: if isAdmin();
+    }
+
+    // ── Disputes ──────────────────────────────────────────────
+    // Path: /bp_data/collections/disputes/{disputeId}
+    match /bp_data/collections/disputes/{disputeId} {
+
+      // Admins and agents can read all disputes.
+      // Clients can read disputes linked to their orders.
+      allow read: if isAdmin() || isAgent()
+        || (isClient() && resource.data.customer_id == request.auth.uid);
+
+      // Any authenticated user can open a dispute (linked to an order).
+      allow create: if isSignedIn();
+
+      // Only admins can resolve or update disputes.
+      allow update: if isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    // ── Deny everything else ──────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
