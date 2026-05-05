@@ -1,0 +1,67 @@
+[build]
+  publish = "."
+
+# ── Security + PWA headers for all pages ──────────────────────────────────────
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # 1. Content-Security-Policy
+    #    Sources allowed:
+    #      - 'self'                      → your own origin
+    #      - fonts.googleapis.com        → Google Fonts CSS
+    #      - fonts.gstatic.com           → Google Fonts font files
+    #      - https://wa.me               → WhatsApp deep-link (anchor href)
+    #    script-src 'unsafe-inline'      → required because all JS is inline in index.html
+    #    style-src  'unsafe-inline'      → required because all CSS is inline in index.html
+    #    img-src    data:                → allows data URIs (common in canvas/receipts)
+    #    frame-ancestors 'none'          → replaces X-Frame-Options (more powerful)
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.googleapis.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com wss://*.firebaseio.com; frame-src 'none' https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none';"
+
+    # 2. Permissions-Policy — deny all sensitive APIs unless you need them
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+
+    # 3. Strict-Transport-Security (HSTS) — enforce HTTPS for 1 year
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
+
+    # 4. Cross-Origin policies — process isolation baseline
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "require-corp"
+
+    # Keep these — still valid and useful
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+    # 5. X-XSS-Protection REMOVED — deprecated; CSP above replaces it properly
+
+
+# ── Service worker — never cache ──────────────────────────────────────────────
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Service-Worker-Allowed = "/"
+
+# ── Manifest ──────────────────────────────────────────────────────────────────
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+    Content-Type = "application/manifest+json"
+
+# ── HTML — no cache so updates deploy instantly ───────────────────────────────
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+# ── Icons — long cache ────────────────────────────────────────────────────────
+[[headers]]
+  for = "/*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+# ── SPA fallback — all routes serve index.html ────────────────────────────────
+[[redirects]]
+  from = "/*"
+  to   = "/index.html"
+  status = 200
