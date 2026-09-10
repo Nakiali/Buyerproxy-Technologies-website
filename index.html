@@ -697,7 +697,7 @@ tr:hover td{background:#fafafa;}
     </div>
     <div class="testi-grid">
       <div class="testi-card"><div class="testi-stars">★★★★★</div><p>"I was about to send money to a scammer on OLX for a laptop. BuyerProxy's agent discovered it was fake. Saved me KES 45,000 — worth every penny of the fee."</p><div class="testi-author">Kevin Muchemo.</div><div class="testi-loc">Nairobi, CBD</div></div>
-      <div class="testi-card"><div class="testi-stars">★★★★★</div><p>"Bought a fridge from a seller in Kisumu. Agent sent videos and photos. The fridge was exactly as described. Delivered to Bungoma in 2 days. Amazing service!"</p><div class="testi-author">Achieng Faridah.</div><div class="testi-loc">Bungoma Town</div></div>
+      <div class="testi-card"><div class="testi-stars">★★★★★</div><p>"Bought a fridge from a seller in Kisumu. Agent sent videos and photos. The fridge was exactly as described. Delivered to Bungoma in 2 days. Amazing service!"</p><div class="testi-author">Achieng Faridah.</div><div cla="testi-lssoc">Bungoma Town</div></div>
       <div class="testi-card"><div class="testi-stars">★★★★★</div><p>"Very professional. The agent even negotiated the price down by KES 3,000 on my behalf for the sofa set. Delivery was on time. I'll definitely use them again."</p><div class="testi-author">James Kamau.</div><div class="testi-loc">Nakuru</div></div>
     </div>
   </section>
@@ -736,7 +736,7 @@ tr:hover td{background:#fafafa;}
         <div class="contact-info-item"><div class="contact-icon-box">💬</div><div><h4>WhatsApp</h4><p><a href="https://wa.me/254726767309" target="_blank">+254 726 767 309</a></p></div></div>
         <div class="contact-info-item"><div class="contact-icon-box">✉️</div><div><h4>Email</h4><p><a id="contact-email-link">buyerproxy.info@gmail.com</a></p></div></div>
         <div class="contact-info-item"><div class="contact-icon-box">📍</div><div><h4>Headquarters</h4><p>Bungoma Town, Western Kenya</p></div></div>
-        <div class="contact-info-item"><div class="contact-icon-box">🕐</div><div><h4>Operating Hours</h4><p>Monday – Saturday: 7AM – 9PM<br>Sunday: 9AM – 6PM</p></div></div>
+        <div class="contact-info-item"><div class="contact-icon-box">🕐</div><div><h4>Operating Hours</h4><p>Monday – Saturday: 7AM – 6PM<br>Sunday: 8AM – 6PM</p></div></div>
         <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
           <button class="btn btn-wa" onclick="openWA()">💬 Chat on WhatsApp</button>
           <a id="send-email-btn" class="btn btn-outline">✉️ Send Email</a>
@@ -1499,9 +1499,9 @@ var _idleFinalTimer = null;   // fires the actual sign-out
 var _idleWarned     = false;
 
 var IDLE_TIMEOUT_MS = {
-  admin:  60 * 60 * 1000,   // 60 minutes
-  agent:  30 * 60 * 1000,   // 30 minutes
-  client: 30 * 60 * 1000    // 30 minutes
+  admin:  10 * 60 * 1000,   // 10 minutes
+  agent:  10 * 60 * 1000,   // 10 minutes
+  client: 10 * 60 * 1000    // 10 minutes
 };
 var IDLE_WARNING_BEFORE_MS = 2 * 60 * 1000; // warn 2 min before
 
