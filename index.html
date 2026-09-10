@@ -1464,7 +1464,6 @@ function showSessionGate(user){
   box.innerHTML =
     "<div class='ps-avatar "+avCls+"' style='width:56px;height:56px;font-size:1.2rem;margin:0 auto 14px;'>"+esc(ini)+"</div>"+
     "<div style='font-family:\"Plus Jakarta Sans\",sans-serif;font-weight:800;font-size:1.05rem;'>Welcome back, "+esc(user.name)+"</div>"+
-    "<div class='muted' style='font-size:.82rem;margin-top:4px;'>Signed in as "+roleLabel+" · "+esc(user.email||user.username||"")+"</div>"+
     "<div style='margin-top:22px;display:flex;flex-direction:column;gap:10px;'>"+
     "<button class='btn btn-gold btn-full' onclick='continueSession()'>Continue as "+esc((user.name||"").split(" ")[0]||"me")+"</button>"+
     "<button class='btn btn-ghost btn-full' onclick='sessionGateSignOut()'>Not you? Sign out</button>"+
