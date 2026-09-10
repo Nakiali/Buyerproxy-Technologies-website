@@ -1063,7 +1063,7 @@ function downloadAnalyticsPDF(){
   var agentRows=agents.map(function(a){
     var ao=orders.filter(function(o){ return String(o.agent_id)===String(a.id); });
     var ad=ao.filter(function(o){ return o.status==="Closed"||o.status==="Delivered"; });
-    var earned=ad.reduce(function(s,o){ return s+(o.service_fee||0)*0.5; },0);
+    var earned=ad.reduce(function(s,o){ return s+(o.service_fee||0)*0.2; },0);
     return "<tr><td>"+esc(a.name)+"</td><td>"+esc(a.location)+"</td><td>"+ao.length+"</td><td>"+ad.length+"</td><td>KES "+num(Math.round(earned))+"</td></tr>";
   }).join("");
   var html="<!DOCTYPE html><html><head><meta charset='UTF-8'><title>BuyerProxy Analytics</title>"
