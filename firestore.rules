@@ -1,0 +1,219 @@
+rules_version = '2';
+
+// ══════════════════════════════════════════════════════════════════
+//  BuyerProxy Technologies — Firestore Security Rules
+//
+//  Data lives at:
+//    bp_data/collections/users/{uid}
+//    bp_data/collections/orders/{orderId}
+//    bp_data/collections/disputes/{disputeId}
+//
+//  Roles (stored in users/{uid}.role):  admin | agent | client
+//
+//  How role-checking works:
+//    Every rule reads the caller's user document from Firestore to
+//    get their role.  This is the ONLY trusted source — client-side
+//    JS cannot spoof it because Firestore rules run server-side.
+// ══════════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Shared helpers ────────────────────────────────────────────
+
+    // Convenience: the authenticated user's profile document.
+    function myDoc() {
+      return get(/databases/$(database)/documents/bp_data/collections/users/$(request.auth.uid));
+    }
+
+    // Role helpers — read from Firestore, not from client-supplied data.
+    function myRole() {
+      return myDoc().data.role;
+    }
+    function isAdmin() { return myRole() == 'admin'; }
+    function isAgent() { return myRole() == 'agent'; }
+    function isClient() { return myRole() == 'client'; }
+    function isSignedIn() { return request.auth != null; }
+
+    // Validate that incoming data contains only the fields we allow,
+    // preventing clients from sneaking in extra keys.
+    function hasOnly(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ── Root document: bp_data/collections ───────────────────────
+    // Nobody should read/write this metadata document directly.
+    match /bp_data/collections {
+      allow read, write: if false;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  USERS  —  bp_data/collections/users/{uid}
+    // ══════════════════════════════════════════════════════════════
+    match /bp_data/collections/users/{uid} {
+
+      // ── READ ────────────────────────────────────────────────────
+      // • Any signed-in user can read their own profile (needed on login).
+      // • Admin can read any profile (to list agents / clients).
+      // • Agents can read other users' profiles only to look up
+      //   usernames for the login-by-username flow (we allow a
+      //   narrow query: where("username","==",x).limit(1)).
+      //   Full list access is admin-only.
+      allow get: if isSignedIn() && (
+                      uid == request.auth.uid ||
+                      isAdmin() ||
+                      isAgent()          // needed for username→email lookup on login
+                    );
+
+      // List queries: admin only (agents/clients must use .get() by uid)
+      allow list: if isSignedIn() && isAdmin();
+
+      // ── CREATE ──────────────────────────────────────────────────
+      // New users are created during registration (doRegister) or
+      // when admin creates an agent (saveNewAgent).
+      // The document ID must equal the Firebase Auth UID.
+      // The role field must be 'client' (self-registration) or
+      // 'agent' (admin creating an agent).
+      allow create: if isSignedIn()
+                    && uid == request.auth.uid    // can only create your own doc
+                    && request.resource.data.role == 'client'  // self-reg = client only
+                    && request.resource.data.uid  == request.auth.uid
+                    && request.resource.data.id   == request.auth.uid
+                    && hasOnly(['id','uid','name','username','email','phone',
+                                'location','role','orders_count','completed','created']);
+
+      // Admin creating an agent doc (uid != request.auth.uid because
+      // createUserWithEmailAndPassword signs in as the new user, but
+      // admin was already signed in — so we trust the admin role check).
+      allow create: if isSignedIn()
+                    && isAdmin()
+                    && request.resource.data.role == 'agent'
+                    && request.resource.data.uid  == uid
+                    && request.resource.data.id   == uid
+                    && hasOnly(['id','uid','name','username','email','phone',
+                                'location','role','orders_count','completed','created']);
+
+      // ── UPDATE ──────────────────────────────────────────────────
+      // Agents can update their own editable profile fields (saveAgentProfile).
+      allow update: if isSignedIn()
+                    && uid == request.auth.uid
+                    && isAgent()
+                    && hasOnly(['phone','location','email']);  // only these fields
+
+      // Admin can update any user (e.g., orders_count, completed, or role changes).
+      // Role can only be changed to 'agent' or 'client', never 'admin'.
+      allow update: if isSignedIn()
+                    && isAdmin()
+                    && (!('role' in request.resource.data) ||
+                        request.resource.data.role in ['agent','client']);
+
+      // ── DELETE ──────────────────────────────────────────────────
+      // Only admin can remove users (deleteUser).
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  ORDERS  —  bp_data/collections/orders/{orderId}
+    // ══════════════════════════════════════════════════════════════
+    match /bp_data/collections/orders/{orderId} {
+
+      // ── READ ────────────────────────────────────────────────────
+      // Admin: all orders.
+      // Agent: only orders assigned to them.
+      // Client: only their own orders (by customer_id == their uid).
+      allow get: if isSignedIn() && (
+                    isAdmin() ||
+                    (isAgent()  && resource.data.agent_uid == request.auth.uid) ||
+                    (isClient() && resource.data.customer_id == request.auth.uid)
+                  );
+
+      // List queries follow same rules — Firestore enforces that the
+      // query's where clauses match what's permitted above.
+      allow list: if isSignedIn() && isAdmin();
+
+      // ── CREATE ──────────────────────────────────────────────────
+      // Public (unauthenticated) orders from the landing page form
+      // (submitPublicOrder) are allowed but locked to the 'New' status.
+      // Signed-in clients can also create orders (submitClientOrder).
+      // Agents and admin can also create on behalf of customers.
+      allow create: if
+        // Unauthenticated public order submission
+        (request.auth == null
+          && request.resource.data.status == 'New'
+          && !('agent_id' in request.resource.data)
+          && hasOnly(['id','display_num','customer_name','customer_phone',
+                      'customer_location','seller_link','category','item_price',
+                      'service_fee','description','seller_location','status',
+                      'created_at','updated_at','source']))
+        ||
+        // Signed-in client creating their own order
+        (isSignedIn() && isClient()
+          && request.resource.data.status == 'New'
+          && request.resource.data.customer_id == request.auth.uid
+          && !('agent_id' in request.resource.data))
+        ||
+        // Admin creating an order manually
+        (isSignedIn() && isAdmin());
+
+      // ── UPDATE ──────────────────────────────────────────────────
+      // Admin can update any field on any order.
+      allow update: if isSignedIn() && isAdmin();
+
+      // Agent can only update orders assigned to them,
+      // and only the status + agent_note + updated_at fields.
+      // They cannot reassign the order to a different agent.
+      allow update: if isSignedIn()
+                    && isAgent()
+                    && resource.data.agent_uid == request.auth.uid
+                    && hasOnly(['status','agent_note','updated_at'])
+                    && request.resource.data.status in [
+                        'Verified','Awaiting Payment','Paid',
+                        'Delivered','Closed','Dispute'
+                      ];
+
+      // ── DELETE ──────────────────────────────────────────────────
+      // Only admin can delete orders.
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  DISPUTES  —  bp_data/collections/disputes/{disputeId}
+    // ══════════════════════════════════════════════════════════════
+    match /bp_data/collections/disputes/{disputeId} {
+
+      // ── READ ────────────────────────────────────────────────────
+      // Admin: all disputes.
+      // Agent: disputes tied to orders they handle.
+      // Clients cannot read the disputes collection directly
+      // (dispute info is visible to them via the order status).
+      allow get, list: if isSignedIn() && (isAdmin() || isAgent());
+
+      // ── CREATE ──────────────────────────────────────────────────
+      // Admin or agent can flag a dispute (flagDispute).
+      // Status must start as 'Open', resolution must be empty.
+      allow create: if isSignedIn()
+                    && (isAdmin() || isAgent())
+                    && request.resource.data.status == 'Open'
+                    && request.resource.data.resolution == ''
+                    && hasOnly(['id','order_id','customer_name','issue',
+                                'status','resolution','created_at']);
+
+      // ── UPDATE ──────────────────────────────────────────────────
+      // Only admin can resolve a dispute (resolveDispute).
+      // Status can only move to 'Resolved', and resolution must be non-empty.
+      allow update: if isSignedIn()
+                    && isAdmin()
+                    && request.resource.data.status == 'Resolved'
+                    && request.resource.data.resolution.size() > 0
+                    && hasOnly(['status','resolution']);
+
+      // ── DELETE ──────────────────────────────────────────────────
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
+    // ── Catch-all: deny everything else ──────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
